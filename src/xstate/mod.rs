@@ -655,6 +655,7 @@ impl XState {
         let transient_for = self.get_transient_for(window)?;
         let override_redirect = self.get_override_redirect(window)?;
         server_state.set_override_redirect(window, override_redirect);
+        server_state.set_transparent(window, self.get_opacity(window)? == Some(0));
 
         let window_types = self
             .get_net_wm_window_types(window)?
@@ -795,6 +796,19 @@ impl XState {
             .map(Option::flatten)
     }
 
+    fn get_opacity(&self, window: x::Window) -> XResult<Option<u32>> {
+        let cookie = self.get_property_cookie(
+            window,
+            self.atoms.net_wm_window_opacity,
+            x::ATOM_CARDINAL,
+            1,
+        );
+        let resolver = |reply: x::GetPropertyReply| reply.value::<u32>().first().copied();
+        PropertyCookieWrapper::new(&self.connection, cookie)
+            .resolve(resolver)
+            .map(Option::flatten)
+    }
+
     fn get_net_wm_window_types(&self, window: x::Window) -> XResult<Option<Vec<x::Atom>>> {
         let cookie = self.get_property_cookie(window, self.window_atoms.ty, x::ATOM_ATOM, 10);
         let resolver = |reply: x::GetPropertyReply| reply.value::<x::Atom>().to_vec();
@@ -903,6 +917,7 @@ xcb::atoms_struct! {
         wm_check => b"_NET_SUPPORTING_WM_CHECK" only_if_exists = false,
         net_wm_name => b"_NET_WM_NAME" only_if_exists = false,
         wm_pid => b"_NET_WM_PID" only_if_exists = false,
+        net_wm_window_opacity => b"_NET_WM_WINDOW_OPACITY" only_if_exists = false,
         net_wm_state => b"_NET_WM_STATE" only_if_exists = false,
         wm_fullscreen => b"_NET_WM_STATE_FULLSCREEN" only_if_exists = false,
         active_win => b"_NET_ACTIVE_WINDOW" only_if_exists = false,

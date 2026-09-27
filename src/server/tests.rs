@@ -1282,6 +1282,20 @@ fn override_redirect_window_after_toplevel_close() {
 }
 
 #[test]
+fn transparent_override_redirect_window_not_mapped() {
+    let (mut f, comp) = TestFixture::new_with_compositor();
+    let win = Window::new(1);
+    let (buffer, surface) = comp.create_surface();
+    f.new_window(win, true, WindowData::default());
+    f.satellite.set_transparent(win, true);
+    f.map_window(&comp, win, &surface.obj, &buffer);
+    f.run();
+    let id = f.check_new_surface();
+    let data = f.testwl.get_surface_data(id).unwrap();
+    assert!(data.role.is_none(), "wrong role: {:?}", data.role);
+}
+
+#[test]
 fn fullscreen() {
     let (mut f, comp) = TestFixture::new_with_compositor();
     let win = Window::new(1);

@@ -105,6 +105,7 @@ struct WindowAttributes {
     has_take_focus: bool,
     role: WindowRole,
     override_redirect: bool,
+    transparent: bool,
     dims: WindowDims,
     size_hints: Option<WmNormalHints>,
     title: Option<WmName>,
@@ -997,6 +998,16 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
         attrs.accepts_input = hints.accepts_input;
     }
 
+    pub fn set_transparent(&mut self, window: x::Window, transparent: bool) {
+        let Some(id) = self.windows.get(&window).copied() else {
+            debug!("not setting transparency for unknown window {window:?}");
+            return;
+        };
+
+        let attrs = &mut self.world.get::<&mut WindowData>(id).unwrap().attrs;
+        attrs.transparent = transparent;
+    }
+
     pub fn set_take_focus(&mut self, window: x::Window, has_take_focus: bool) {
         let Some(id) = self.windows.get(&window).copied() else {
             debug!("not setting hints for unknown window {window:?}");
@@ -1406,12 +1417,6 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
 
         {
             let data = self.world.entity(entity).unwrap();
-            let surface = data.get::<&client::wl_surface::WlSurface>().unwrap();
-            surface.attach(None, 0, 0);
-            surface.commit();
-
-            xdg_surface = self.xdg_wm_base.get_xdg_surface(&surface, &self.qh, entity);
-
             let window_data = data.get::<&WindowData>().unwrap();
             if window_data.attrs.role.is_popup() {
                 popup_for = self.last_hovered.or(self.last_focused_toplevel);
@@ -1426,6 +1431,17 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
                     break;
                 }
             }
+
+            if window_data.attrs.override_redirect && window_data.attrs.transparent {
+                debug!("not mapping fully transparent override redirect window {window:?}");
+                return false;
+            }
+
+            let surface = data.get::<&client::wl_surface::WlSurface>().unwrap();
+            surface.attach(None, 0, 0);
+            surface.commit();
+
+            xdg_surface = self.xdg_wm_base.get_xdg_surface(&surface, &self.qh, entity);
         }
 
         let (role, is_toplevel) = if let Some(parent) = popup_for {
