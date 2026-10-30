@@ -1319,10 +1319,11 @@ impl OutputEvent {
                 height,
                 refresh,
             } => {
-                let Ok((output, dimensions)) = state
-                    .world
-                    .query_one_mut::<(&WlOutput, &mut OutputDimensions)>(target)
-                else {
+                let Ok((output, dimensions, xdg)) = state.world.query_one_mut::<(
+                    &WlOutput,
+                    &mut OutputDimensions,
+                    Option<&XdgOutputServer>,
+                )>(target) else {
                     return;
                 };
 
@@ -1335,6 +1336,13 @@ impl OutputEvent {
                     debug!("{} dimensions: {width}x{height}", output.id());
                 }
                 output.mode(convert_wenum(flags), width, height, refresh);
+                if let Some(xdg) = xdg {
+                    if dimensions.rotated_90 {
+                        xdg.logical_size(dimensions.height, dimensions.width);
+                    } else {
+                        xdg.logical_size(dimensions.width, dimensions.height);
+                    }
+                }
             }
             Event::Scale { factor } => {
                 debug!(
@@ -1359,11 +1367,22 @@ impl OutputEvent {
                     .name(name.clone());
                 state.world.insert(target, (OutputName(name),)).unwrap();
             }
+            Event::Done {} => {
+                let Ok((output, xdg)) = state
+                    .world
+                    .query_one_mut::<(&WlOutput, Option<&XdgOutputServer>)>(target)
+                else {
+                    return;
+                };
+                if let Some(xdg) = xdg {
+                    xdg.done();
+                }
+                output.done();
+            }
             _ => simple_event_shunt! {
                 state.world.get::<&WlOutput>(target).unwrap(),
                 event: client::wl_output::Event => [
                     Description { description },
-                    Done
                 ]
             },
         }
