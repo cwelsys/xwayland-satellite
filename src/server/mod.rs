@@ -133,10 +133,16 @@ struct WindowData {
     attrs: WindowAttributes,
     output_offset: WindowOutputOffset,
     activation_token: Option<String>,
+    pid: Option<u32>,
 }
 
 impl WindowData {
-    fn new(override_redirect: bool, dims: WindowDims, activation_token: Option<String>) -> Self {
+    fn new(
+        override_redirect: bool,
+        dims: WindowDims,
+        activation_token: Option<String>,
+        pid: Option<u32>,
+    ) -> Self {
         Self {
             mapped: false,
             attrs: WindowAttributes {
@@ -147,6 +153,7 @@ impl WindowData {
             },
             output_offset: WindowOutputOffset::default(),
             activation_token,
+            pid,
         }
     }
 
@@ -354,6 +361,29 @@ enum ObjectEvent {
     TabletPadRing(zwp_tablet_pad_ring_v2::Event),
     TabletPadStrip(zwp_tablet_pad_strip_v2::Event)
 }
+}
+
+fn proton_exe_app_id(class: &str, pid: u32) -> Option<String> {
+    if !class.starts_with("steam_app_") && class != "steam_proton" {
+        return None;
+    }
+    let environ = std::fs::read(format!("/proc/{pid}/environ")).ok()?;
+    if !environ
+        .split(|byte| *byte == 0)
+        .any(|var| var == b"XWAYLAND_APP_ID_FROM_EXE=1")
+    {
+        return None;
+    }
+    let maps = std::fs::read(format!("/proc/{pid}/maps")).ok()?;
+    mapped_exe_name(&String::from_utf8_lossy(&maps))
+}
+
+fn mapped_exe_name(maps: &str) -> Option<String> {
+    maps.lines()
+        .filter_map(|line| line.find('/').map(|start| &line[start..]))
+        .filter_map(|path| path.rsplit('/').next())
+        .map(str::to_lowercase)
+        .find(|name| name.ends_with(".exe"))
 }
 
 fn handle_new_globals<'a, S: X11Selection + 'static>(
@@ -893,7 +923,7 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
 
         let id = self.world.spawn((
             window,
-            WindowData::new(override_redirect, dims, activation_token),
+            WindowData::new(override_redirect, dims, activation_token, pid),
         ));
 
         self.windows.insert(window, id);
@@ -979,6 +1009,10 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
 
         let mut win = data.get::<&mut WindowData>().unwrap();
 
+        let class = win
+            .pid
+            .and_then(|pid| proton_exe_app_id(&class, pid))
+            .unwrap_or(class);
         let class = win.attrs.class.insert(class);
         if let Some(role) = data.get::<&SurfaceRole>() {
             if let SurfaceRole::Toplevel(Some(data)) = &*role {
