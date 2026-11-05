@@ -375,7 +375,10 @@ fn proton_exe_app_id(class: &str, pid: u32) -> Option<String> {
         return None;
     }
     let maps = std::fs::read(format!("/proc/{pid}/maps")).ok()?;
-    mapped_exe_name(&String::from_utf8_lossy(&maps))
+    mapped_exe_name(&String::from_utf8_lossy(&maps)).or_else(|| {
+        let cmdline = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+        cmdline_exe_name(&cmdline)
+    })
 }
 
 fn mapped_exe_name(maps: &str) -> Option<String> {
@@ -384,6 +387,13 @@ fn mapped_exe_name(maps: &str) -> Option<String> {
         .filter_map(|path| path.rsplit('/').next())
         .map(str::to_lowercase)
         .find(|name| name.ends_with(".exe"))
+}
+
+fn cmdline_exe_name(cmdline: &[u8]) -> Option<String> {
+    let exe = cmdline.split(|byte| *byte == 0).next()?;
+    let name = exe.rsplit(|byte| *byte == b'/' || *byte == b'\\').next()?;
+    let name = String::from_utf8_lossy(name).to_lowercase();
+    name.ends_with(".exe").then_some(name)
 }
 
 fn handle_new_globals<'a, S: X11Selection + 'static>(
