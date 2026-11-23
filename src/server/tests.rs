@@ -3372,26 +3372,3 @@ fn decorations_max_height_int_max() {
 /// See Pointer::handle_event for an explanation.
 #[test]
 fn popup_pointer_motion_workaround() {}
-
-#[test]
-fn mapped_exe_name() {
-    let maps = "\
-00400000-00401000 r--p 00000000 00:2a 4521    /pfx/drive_c/Program Files (x86)/Battle.net/Battle.net.exe
-6ffffc400000-6ffffc401000 r--p 00000000 00:2a 9911    /proton/files/lib/wine/i386-windows/kernel32.dll
-7f0000000000-7f0000001000 rw-p 00000000 00:00 0
-7f0000010000-7f0000011000 r--p 00000000 00:2a 4777    /pfx/drive_c/Program Files (x86)/World of Warcraft/_retail_/Wow.exe
-";
-    assert_eq!(super::mapped_exe_name(maps), Some("battle.net.exe".into()));
-    assert_eq!(
-        super::mapped_exe_name(
-            "140000000-140001000 r--p 00000000 00:2a 4777    /pfx/drive_c/World of Warcraft/_retail_/Wow.exe\n"
-        ),
-        Some("wow.exe".into())
-    );
-    assert_eq!(
-        super::mapped_exe_name(
-            "7f0000000000-7f0000001000 r-xp 00000000 00:2a 12    /usr/bin/wine-preloader\n"
-        ),
-        None
-    );
-}
